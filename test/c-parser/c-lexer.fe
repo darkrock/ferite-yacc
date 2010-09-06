@@ -1,0 +1,226 @@
+uses "ferite-lex";
+
+global {
+	string LABEL = '[a-zA-Z_][a-zA-Z0-9_]*[?!]?';
+	string SYMBOL = ':[a-zA-Z_][a-zA-Z0-9_]*';
+	string DOTLABEL = '[a-zA-Z_][a-zA-Z0-9_]*([\.][a-zA-Z_][a-zA-Z0-9_]*)*';
+	string INTSUFFIX = '(([uU][lL]?)|([lL][uU]?))';
+	string FLTSUFFIX = '([fFlL])';
+}
+
+class CLexer extends Flexer {
+	
+	number line = 1;
+	string file = '';
+	string buffer = '';
+	boolean inStringExpression = false;
+	
+	object container;
+	constructor( object container ) {
+		.container = container;
+		self();
+	}
+	function setupTokeniser() {
+		
+		.defaultContext() using ( c ) {
+			c.token( '/\*' ) using ( flexer, token ) { flexer.pushContext('COMMENT'); };
+			c.token( '//' ) using ( flexer, token ) { flexer.pushContext('CPPCOMMENT'); };
+
+			// String here
+			c.token( '"' ) using ( flexer, token ) {
+				.buffer = '';
+				flexer.pushContext('DOUBLE_QUOTE_STRING');
+			};
+			
+			// Single quote string here
+			c.token( "'" ) using ( flexer, token ) {
+				.buffer = '';
+				flexer.pushContext('SINGLE_QUOTE_STRING');
+			};
+
+			c.token( '\+=', ADDEQ );
+			c.token( "-=", SUBEQ );
+			c.token( '\*=', MULEQ );
+			c.token( "/=", DIVEQ );
+			c.token( "%=", MODEQ );
+			c.token( '\^=', XOREQ );
+			c.token( "&=", ANDEQ );
+			c.token( '\|=', OREQ );
+			c.token( "<<", SL );
+			c.token( ">>", SR );
+			c.token( "<<=", SLEQ );
+			c.token( ">>=", SREQ );
+			c.token( "==", EQ );
+			c.token( "!=", NOTEQ );
+			c.token( "<=", LTEQ );
+			c.token( ">=", GTEQ );
+			c.token( "&&", ANDAND );
+			c.token( '\|\|', OROR );
+			c.token( '\+\+', PLUSPLUS );
+			c.token( "--", MINUSMINUS );
+			c.token( "->", ARROW );
+			c.token( ",", ',' );
+			c.token( '\+', '+' );
+			c.token( "-", '-' );
+			c.token( '}', '}' );
+			c.token( '{', '{' );
+			c.token( "<%", '{' );
+			c.token( "}", '}' );
+			c.token( "%>", '}' );
+			c.token( '\[', '[' );
+			c.token( '\]', ']' );
+			c.token( '\(', '(' );
+			c.token( '\)', ')' );
+			c.token( ";", ';' );
+			c.token( ":", ':' );
+			c.token( '\.\.\.', ELLIPSIS );
+			c.token( '\?', '?' );
+			c.token( '\.', '.' );
+			c.token( '\*', '*' );
+			c.token( "/", '/' );
+			c.token( "%", '%' );
+			c.token( '\^', '^' );
+			c.token( "&", '&' );
+			c.token( '\|', '|' );
+			c.token( "~", '~' );
+			c.token( "!", '!' );
+			c.token( "=", '=' );
+			c.token( "<", '<' );
+			c.token( ">", '>' );
+			
+			c.token( "auto", AUTO );
+			c.token( "break", BREAK );
+			c.token( "case", CASE );
+			c.token( "char", CHAR );
+			c.token( "const", CONST );
+			c.token( "continue", CONTINUE );
+			c.token( "default", DEFAULT );
+			c.token( "do", DO );
+			c.token( "double", DOUBLE );
+			c.token( "else", ELSE );
+			c.token( "enum", ENUM );
+			c.token( "extern", EXTERN );
+			c.token( "float", FLOAT );
+			c.token( "for", FOR );
+			c.token( "goto", GOTO );
+			c.token( "if", IF );
+			c.token( "int", INT );
+			c.token( "long", LONG );
+			c.token( "register", REGISTER );
+			c.token( "return", RETURN );
+			c.token( "short", SHORT );
+			c.token( "signed", SIGNED );
+			c.token( "sizeof", SIZEOF );
+			c.token( "static", STATIC );
+			c.token( "struct", STRUCT );
+			c.token( "switch", SWITCH );
+			c.token( "typedef", TYPEDEF );
+			c.token( "union", UNION );
+			c.token( "unsigned", UNSIGNED );
+			c.token( "void", VOID );
+			c.token( "volatile", VOLATILE );
+			c.token( "while", WHILE );
+
+			c.token( '__inline__', INLINE );
+			c.token( '__inline', INLINE );
+			c.token('__asm__', ASM);
+			
+			c.token( '[ \t\r]', null );
+			c.token( '\n') using ( flexer, token ) {
+				Console.println("new line: ${.line}"); 
+				.line++;
+			};
+
+			c.token( 'LABEL', "$LABEL" ) using ( flexer, token ) {
+				flexer.attach( token.toCParserVal() );
+				if( .container.validType(token) )
+					return TYPEDEF_NAME;
+				return IDENTIFIER;
+			};
+			c.token( 'BNUM',  "0b[0-1]+$INTSUFFIX?", closure( flexer, token ) { 
+				flexer.attach( token.binaryStringToNumber().toCParserVal() );
+				return INTEGER;
+			});
+			c.token( 'ONUM',  "0o[0-7]+$INTSUFFIX?", closure( flexer, token ) { 
+				flexer.attach( token.octalStringToNumber().toCParserVal() );
+				return INTEGER;
+			});
+			c.token( 'HNUM',  "0x[0-9a-fA-F]+$INTSUFFIX?", closure( flexer, token ) { 
+				flexer.attach( token.hexStringToNumber().toCParserVal() );
+				return INTEGER;
+			});
+			
+			c.token( 'RNUM',  "(([0-9]*[\.][0-9]+)|([0-9]+[\.][0-9]+))$FLTSUFFIX?" ) using ( flexer, token ) { 
+				flexer.attach( token.toDouble().toCParserVal() );
+				return FLOATING;
+			};
+			c.token( 'NNUM',  "(([0]{1})|([1-9]+[0-9]*))$INTSUFFIX?" ) using ( flexer, token ) { 
+				 flexer.attach( token.toLong().toCParserVal() );
+				return INTEGER;
+			};
+		};
+
+		.context('COMMENT') using ( c ) {
+			c.token( '/\*' ) using ( flexer, token ) { flexer.pushContext('COMMENT'); };
+			c.token( '[*]/' ) using ( flexer, token ) { flexer.popContext(); };
+			c.token( '\*') using ( flexer, token ) { };
+			c.token( '\n' ) using ( flexer, token ) { Console.println("new line: ${.line}"); .line++; };
+			c.token( '/[^*\n]') using ( flexer, token ) { };
+			c.token( '[^*/]*' ) using ( flexer, token ) { };
+		};
+
+		.context('CPPCOMMENT') using ( c ) {
+			c.token( '[^\n]*\n') using ( flexer, token ) { Console.println("new line: ${.line}");  .line++; flexer.popContext(); };
+		};
+		
+		.context('DOUBLE_QUOTE_STRING') using ( c ) {
+			c.token( '"' ) using ( flexer, token ) {
+				flexer.attach( .buffer.toCParserVal() );
+				flexer.popContext();
+				return STRING;
+			};
+			c.token( '\\n'  ) using ( flexer, token ) { .buffer += "\n"; };
+			c.token( '\\t'  ) using ( flexer, token ) { .buffer += "\t"; };
+			c.token( '\\r'  ) using ( flexer, token ) { .buffer += "\r"; };
+			c.token( '\\f'  ) using ( flexer, token ) { .buffer += "\f"; };
+			c.token( '\\a'  ) using ( flexer, token ) { .buffer += "\a"; };
+			c.token( '\\\"' ) using ( flexer, token ) { .buffer += "\""; };
+			c.token( '\n'   ) using ( flexer, token ) { Console.println("new line: ${.line}");  .line++; .buffer += "\n"; };
+			// Numbers should go here
+			
+			c.token( '\\.'  ) using ( flexer, token ) { .buffer += token[1..]; };
+			c.token( '[^\n"\\]+' ) using ( flexer, token ) { .buffer += token; };
+			c.token( "\\\\" ) using ( flexer, token ) { .buffer += "\\"; };
+			
+			c.token( 'BNUM',  '\\0b[0-1]+', closure( flexer, token ) { 
+				.buffer += String.numToChar(token[1..].binaryStringToNumber().toCParserVal());
+			});
+			c.token( 'ONUM',  '\\0[0-7]+', closure( flexer, token ) { 
+				.buffer += String.numToChar(token[1..].octalStringToNumber().toCParserVal());
+			});
+			c.token( 'HNUM',  '\\0x[0-9a-fA-F]+', closure( flexer, token ) { 
+				.buffer += String.numToChar(token[1..].hexStringToNumber());
+			});
+		};
+		
+		.context('SINGLE_QUOTE_STRING') using ( c ) {
+			// Escaped quote
+			c.token( '\\\'' ) using ( flexer, token ) { .buffer += "'"; };
+			// End of string
+			c.token( '\'' ) using ( flexer, token ) {
+				flexer.attach( .buffer.toCParserVal() );
+				flexer.popContext();
+				return CHARACTER;
+			};
+			// Check for new lines
+			c.token( '\n' ) using ( flexer, token ) {
+				Console.println("new line: ${.line}"); 
+				.buffer += "\n";
+				.line++;
+			};
+			// These eat up the string
+			c.token( '[^\n\'\\]+' ) using ( flexer, token ) { .buffer += token; };
+			c.token( "\\\\" ) using ( flexer, token ) { .buffer += "\\"; };
+		};
+	}
+}

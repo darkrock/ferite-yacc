@@ -1,0 +1,51 @@
+uses "console";
+uses "string";
+uses "math", "number";
+uses "filesystem";
+uses "CParser";
+uses "c-lexer";
+
+class C {
+	object lexer;
+	object parser;
+	object root;
+	
+	array  typeList;
+	
+	constructor {
+		.lexer = new CLexer(self);
+		.parser = new CParser(self);
+	}
+	
+	function addType( string t ) {
+		.typeList[t] = true;
+	}
+	function validType( string t ) {
+		return .typeList.keyExists(t);
+	}
+	function process( string text ) {
+		text = Regexp.replaceAll('__attribute__.*;', text, ';');
+		monitor {
+			Tree.parser = .parser;
+			.lexer.setupTokeniser();
+			.parser.setLexer(.lexer);
+			.lexer.start(text);
+			.parser.parse();
+			.root = Tree.root;
+		} handle {
+			Console.println("Error: ${err.str}");
+		}
+	}
+	function processFile( string filename ) {
+		return .process(File.open(filename).toString());
+	}
+}
+
+object c = new C();
+
+c.addType('__builtin_va_list');
+c.addType('FILE');
+
+c.processFile(argv[0]);
+
+Console.println(c.root.toXMLString());

@@ -1,0 +1,21 @@
+--------------------------------------------------------------------------------------------------------
+20.06.2006 09:21 (BST), boris
+
+	* Added 'array' to the parser value
+	* Added to{ClassName}Val functions for the namespaces and Obj class
+	
+
+--------------------------------------------------------------------------------------------------------
+20.06.2006 00:57 (BST), boris
+
+	* Update the generated source to be constructor() rather than class name
+	* Change the example to use the Flexer based lexer, this works nicely but needs
+	  to be integrated better.
+	* Token constants are now globals rather than instances
+
+--------------------------------------------------------------------------------------------------------
+03.05.2003 13:52 (BST), boris
+
+  * Initial import into CVS. This was made possible with the nested block code just put into ferite.
+  * Put a calculator demo there
+

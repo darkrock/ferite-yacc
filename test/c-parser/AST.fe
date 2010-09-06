@@ -1,0 +1,333 @@
+uses "xml", "array";
+
+class Tree {
+	
+	static object parser;
+	static object root;
+	
+	number node;
+	void   value;
+	object child;
+	object next;
+	object parent;
+	array  types;
+	number lineNumber;
+	
+	boolean inATree;
+	
+	static function node( number node ) {
+		object o = new Tree();
+		o.node = node;
+		return o;
+	}
+	static function value( number node, void value ) {
+		object o = new Tree();
+		o.node = node;
+		o.value = value;
+		return o;
+	}
+	static function unary( number node, object child ) {
+		object o = new Tree();
+		o.node = node;
+		o.add( child );
+		return o;
+	}
+	static function binary( number node, object left, object right ) {
+		object o = new Tree();
+		o.node = node;
+		o.add( left );
+		o.add( right );
+		return o;
+	}
+	static function ternary( number node, object left, object center, object right ) {
+		object o = new Tree();
+		o.node = node;
+		o.add( left );
+		o.add( center );
+		o.add( right );
+		return o;
+	}
+	constructor {
+		.inATree = false;
+	}
+	function add( object child ) {
+		if( child != self and child and not child.inATree ) {
+			child.inATree = true;
+			child.parent = self;
+			if( not .child )
+				.child = child;
+			else {
+				object t = .child;
+				while( t.next )
+					t = t.next;
+				t.next = child;
+			}
+		} else {
+			new Error("Child already within a tree!");
+		}
+	}
+	function insert( object child ) {
+		if( child != self and child ) {
+			child.parent = self;
+			child.next = .child;
+			.child = child;
+		}
+	}
+	function addSibling( object sibling ) {
+		if( sibling != self and sibling ) {
+			object t = self;
+			while( t.next )
+				t = t.next;
+			t.next = sibling;
+			sibling.parent = self.parent;
+		}
+	}
+	function attribute_missing( string name ) {
+		array children = [];
+		.each() using ( child ) {
+			if( child.name() == name ) {
+				children[] = child;
+			}
+		};
+		if( not children ) {
+			raise new Error('NoSuchChild',0);
+		}
+		if( children.size() > 1 )
+			return children;
+		return children[0];
+	}
+	function each() {
+		if( .child ) {
+			object t = .child;
+			while( t and deliver(t) isa void ) {
+				t = t.next;
+			}
+		}
+	}
+	function hasChildByName( string name ) {
+		object child = null;
+		.each() using ( t ) {
+			if( t.name() == name ) {
+				child = t;
+				return false;
+			}
+		};
+		return child;
+	}
+	function childrenByName( string name ) {
+		array children;
+		.each() using ( t ) {
+			if( t.name() == name )
+				children[] = t;
+		};
+		return children;
+	}
+	function removeChild( object child ) {
+		if( .child ) {
+			if( .child == child ) {
+				.child = null;
+			} else {
+				object t = .child;
+				while( t.next ) {
+					if( t.next == child ) {
+						t.next = t.next.next;
+						break;
+					}
+					t = t.next;
+				}
+			}
+		}
+	}
+	function replaceChildWithNode( object child, void node ) {
+		if( .child ) {
+			if( node and node isa object and child != node ) {
+				if( .child == child ) {
+					node.next = .child.next;
+					.child = node;
+				} else {
+					object t = .child;
+					while( t.next ) {
+						if( t.next == child ) {
+							node.next = t.next.next;
+							t.next = node;
+							break;
+						}
+						t = t.next;
+					}
+				}
+				node.parent = self;
+			}
+			if( node == null ) {
+				.removeChild( child );
+			}
+		}
+	}
+	function walkWithClosure( object dblock, array requiredNodes ) {
+		boolean wantEntryExit = false;
+		if( requiredNodes.size() == 0 or requiredNodes.valueExists(.node) ) {
+			monitor {
+				dblock.invoke(self,true);
+				wantEntryExit = true;
+			} handle {
+				dblock.invoke(self);
+			}
+		}
+		.each() using ( child ) {
+			child.parent = self;
+			child.walkWithClosure(dblock, requiredNodes);
+		};
+		if( wantEntryExit ) {
+			dblock.invoke(self,false);
+		}
+	}
+	function walk() {
+		object dblock = recipient();
+		.walkWithClosure(dblock,[]);
+	}
+	function walk( array requiredNodes ) {
+		object dblock = recipient();
+		.walkWithClosure(dblock, requiredNodes);
+	}
+	private function matchNode( object node, object match, array &captures ) {
+		if( node.name() == match.getElementName() ) {
+			if( match.hasChildren() ) {
+				boolean gotMatch = match.getChildren().each() using ( xmlNode ) {
+					string nodeName = xmlNode.getElementName();
+					if( nodeName != 'text' ) {
+						array childNodes = node.childrenByName(nodeName);
+						object childNode = null;
+						number index = 0;
+						if( childNodes ) {
+							while( index < childNodes.size() and (childNode = childNodes[index++]) ) {
+								if( not captures.valueExists(childNode) ) {
+									break;
+								}
+							}
+						}
+						if( not childNode or not .matchNode(childNode, xmlNode, captures) ) {
+							boolean optional = (xmlNode.getAttributeByName('state') == 'optional');
+							boolean unreal = (xmlNode.getAttributeByName('state') == 'forbidden');
+							if( not childNode and unreal )
+								return;
+							if( not optional )
+								return false;
+						} 
+					}
+				};
+				if( not gotMatch )
+					return false;
+			}
+			if( match.getAttributeByName('state') == 'forbidden' ) {
+				// Unreal is when it exists and we don't want it to.
+				return false;
+			}
+			if( match.hasAttribute('capture') ) {
+				string name = match.getAttributeByName('capture');
+				// Never use a node more than once
+				if( captures.valueExists(node) ) {
+					return false;
+				}
+				captures[name] = node;
+			}
+			return true;
+		}
+		return false;
+	}
+	function capture( object match ) {
+		array captures = [];
+		return [ .matchNode( self, match, captures ), captures ];
+	}
+	array replaceSystem;
+	function clearMatches() {
+		.replaceSystem = [];
+	}
+	function addMatch( string expression, object block ) {
+		object parser = new XML.TreeParser();
+		object document = null;
+		parser.parseChunk(expression);
+		document = parser.getDocumentElement();
+
+		.replaceSystem[] = [ document, block, parser ];
+	}
+	function applyMatches() {
+		.walk() using ( node ) {
+			.replaceSystem.each() using ( replacement ) {
+				array rval = node.capture( replacement[0] );
+				if( rval[0] ) {
+					node.parent.replaceChildWithNode( node, replacement[1].invoke(node, rval[1]) );
+				}
+			};
+		};
+	}
+	function replace( string expression ) {
+		object block = recipient();		
+		.clearMatches();
+		.addMatch( expression, block );
+		.applyMatches();
+	}
+	function find( string expression ) {
+		return .replace( expression ) using recipient();
+	}
+	function canFind( string expression ) {
+		boolean result = false;
+		.find(expression) using ( node, captures ) {
+			result = true;
+		};
+		return result;
+	}
+	function valueToString() {
+		if( .value isa string ) {
+			string r = Regexp.replaceAll("'", .value, "\\'");
+			return "'${.value}'";
+		}
+		return .value;
+	}
+	function toString( number depth ) {
+		string ws = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
+		string prefix = (depth > 0 ? ws[..(depth - 1)] : '');
+		string output = '';
+		string value = "= ${.valueToString()}";
+		string types = '[' + .types.join(',') using ( item ) { return Regexp.replaceAll( '^[TI]_', Tree.parser.yyname[item], '' ).toLower(); }+ ']';
+		object t;
+		
+		output = "$prefix${.name()} ${(.value ? value : '')}${(.types ? types : '')} ";
+		if( .child ) {
+			output += " {\n";
+			t = .child;
+			while( t ) {
+				output += t.toString(depth + 1);
+				t = t.next;
+			}
+			output += "$prefix}\n";
+		} else {
+			output += ";\n";
+		}
+		return output;
+	}
+	function toString()
+		return .toString(0);
+	
+	function name() {
+		return Regexp.replaceAll( '^[TI]_', Tree.parser.yyname[.node], '' ).toLower();
+	}
+	function toXMLString( number depth ) {
+		string ws = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
+		string prefix = (depth > 0 ? ws[..(depth - 1)] : '');
+		string output = '';
+		string nodeName = .name();
+		object t;
+		
+		output += "$prefix<$nodeName type=\"${.node}\"" + (.value ? " value=\"${.value}\"" : '') + (not .child ? ' /' : '') + ">\n";
+		if( .child ) {
+			t = .child;
+			while( t ) {
+				output += t.toXMLString(depth + 1);
+				t = t.next;
+			}
+			output += "$prefix</$nodeName>\n";
+		}
+		return output;
+	}
+	function toXMLString()
+		return '<?xml version="1.0" encoding="UTF-8" ?>' + "\n" + .toXMLString(0);
+}

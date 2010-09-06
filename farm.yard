@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<yard name="ferite-yacc">
+
+	<executable id="ferite-yacc">
+		<property type="name" value="ferite-yacc" />
+		<list type="source">
+			<fileset dir="src" match="^[a-z0-9]*\.[ch]$" />
+		</list>
+		<property type="prefix" value="$(prefix)/bin" />
+	</executable>
+
+	<phase id="install" depends="build">
+		<perform action="install" target="ferite-yacc" />
+	</phase>
+
+</yard>

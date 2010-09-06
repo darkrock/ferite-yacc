@@ -1,0 +1,22 @@
+This is a hacked version of BYACC/Java which in turn is
+a hacked version of BYACC.
+
+BYACC/Java can be found here:
+		   http://troi.lincom-asg.com/~rjamison/byacc
+
+BYACC/ferite is a parser generator for ferite. 
+
+This is very hacky and does work so please see test/Calculator on
+how to use it. It should evolve and at somepoint I will port the
+code from ferite/src/ferite_parser.y to this. I will also be 
+producing a ferite-lex at somepoint.
+
+To compile:
+  cd src/ && make
+  
+To test:
+  cd test/Calculator && make test
+  
+Enjoy,
+
+Chris

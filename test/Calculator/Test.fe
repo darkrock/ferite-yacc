@@ -1,0 +1,33 @@
+uses "Parser";
+
+object parser = new Parser();
+object lexer = new Flexer();
+
+// Setup the lexer
+lexer.defaultContext() using ( c ) {
+	c.token( 'NNUM', '(([0]{1})|([1-9]+[0-9]*))' ) using ( flexer, token ) { 
+		flexer.attach(token.toNumber().toParserVal());
+		return NUM;
+	};	
+	c.token( '[ \t]', null );
+};
+parser.setLexer( lexer );
+
+// Some banner
+Console.println("BYACC/ferite Calculator Demo");
+Console.println("e.g.: '( 3 + 5 ) * 2' or 'quit' to exit.");
+while (true)
+{
+	string ins = '';
+    Console.print("Expression: ");
+	Console.stdout.flush();
+    ins = Console.readln();
+	
+	if( ins == "quit\n" )
+		return;
+	
+	// Set the text to parse
+	lexer.start( ins );
+	// Tell the parser to parse
+    parser.parse();
+}
